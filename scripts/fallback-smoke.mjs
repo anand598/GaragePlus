@@ -261,6 +261,52 @@ async function main() {
     assert(trackedAfterCreate.sparePart.stockQuantity === 3, "Tracked part stock should decrement after invoice creation.");
     assert(untrackedAfterCreate.sparePart.stockQuantity == null, "Untracked part stock should remain null after invoice creation.");
 
+    const updatedInvoice = await requestJson(
+      `/api/invoices/${invoice.invoice.id}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          customerId: customer.customer.id,
+          vehicleId: vehicle.vehicle.id,
+          pricingTier: "PREMIUM",
+          workStatus: "READY_FOR_DELIVERY",
+          discount: 100,
+          taxPercentage: 18,
+          notes: "Fallback smoke test invoice updated",
+          items: [
+            {
+              itemType: "SERVICE",
+              sourceId: services.services[0].id,
+              name: services.services[0].name,
+              quantity: 1,
+              unitPrice: 1250
+            },
+            {
+              itemType: "PART",
+              sourceId: trackedPart.sparePart.id,
+              name: "Smoke Test Tracked Part",
+              quantity: 1,
+              unitPrice: 300
+            },
+            {
+              itemType: "PART",
+              sourceId: untrackedPart.sparePart.id,
+              name: "Smoke Test Untracked Part",
+              quantity: 4,
+              unitPrice: 220
+            }
+          ]
+        })
+      }
+    );
+    assert(updatedInvoice.invoice.pricingTier === "PREMIUM", "Invoice edit should update pricing tier.");
+    assert(updatedInvoice.invoice.workStatus === "READY_FOR_DELIVERY", "Invoice edit should update work status.");
+
+    const trackedAfterEdit = await requestJson(`/api/spare-parts/${trackedPart.sparePart.id}`);
+    const untrackedAfterEdit = await requestJson(`/api/spare-parts/${untrackedPart.sparePart.id}`);
+    assert(trackedAfterEdit.sparePart.stockQuantity === 4, "Tracked part stock should reconcile after invoice edit.");
+    assert(untrackedAfterEdit.sparePart.stockQuantity == null, "Untracked part stock should stay null after invoice edit.");
+
     await requestJson(
       `/api/invoices/${invoice.invoice.id}/status`,
       {
@@ -281,7 +327,7 @@ async function main() {
     );
 
     const trackedAfterReopen = await requestJson(`/api/spare-parts/${trackedPart.sparePart.id}`);
-    assert(trackedAfterReopen.sparePart.stockQuantity === 3, "Tracked part stock should decrement again when a cancelled invoice is reopened.");
+    assert(trackedAfterReopen.sparePart.stockQuantity === 4, "Tracked part stock should decrement again when a cancelled invoice is reopened.");
 
     const reminderPreview = await requestJson(
       "/api/reminders/preview",

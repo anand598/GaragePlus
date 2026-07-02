@@ -58,22 +58,29 @@ export default async function UsersPage({
           {users.map((user) => (
             <div key={user.id} className="flex flex-col justify-between gap-3 rounded-3xl border border-slate-100 p-5 md:flex-row md:items-center">
               {canManage && user.role !== "OWNER" ? (
-                <form action={updateStaffUserAction} className="flex w-full flex-col gap-3 lg:flex-row lg:items-center">
-                  <input type="hidden" name="redirectTo" value="/users" />
-                  <input type="hidden" name="successMessage" value="User updated successfully." />
-                  <input type="hidden" name="userId" value={user.id} />
-                  <input name="name" defaultValue={user.name} className="field lg:max-w-xs" />
-                  <input name="email" defaultValue={user.email} className="field lg:max-w-sm" />
-                  <select name="role" defaultValue={user.role} className="field lg:max-w-[180px]">
-                    <option value="MANAGER">Manager</option>
-                    <option value="CASHIER">Cashier</option>
-                    <option value="STAFF">Staff</option>
-                  </select>
-                  <button className="btn-primary">Save</button>
-                  <button formAction={deleteStaffUserAction} name="submitSuccessMessage" value="User removed successfully." className="text-sm text-rose-600">
-                    Remove
-                  </button>
-                </form>
+                <div className="w-full space-y-2">
+                  <form action={updateStaffUserAction} className="flex w-full flex-col gap-3 lg:flex-row lg:items-center">
+                    <input type="hidden" name="redirectTo" value="/users" />
+                    <input type="hidden" name="successMessage" value="User updated successfully." />
+                    <input type="hidden" name="userId" value={user.id} />
+                    <input name="name" defaultValue={user.name} className="field lg:max-w-xs" />
+                    <input name="email" defaultValue={user.email} className="field lg:max-w-sm" />
+                    <select name="role" defaultValue={user.role} className="field lg:max-w-[180px]">
+                      <option value="MANAGER">Manager</option>
+                      <option value="CASHIER">Cashier</option>
+                      <option value="STAFF">Staff</option>
+                    </select>
+                    <button className="btn-primary">Save</button>
+                  </form>
+                  <form action={deleteStaffUserAction} className="flex justify-end">
+                    <input type="hidden" name="redirectTo" value="/users" />
+                    <input type="hidden" name="successMessage" value="User removed successfully." />
+                    <input type="hidden" name="userId" value={user.id} />
+                    <button className="text-sm text-rose-600">
+                      Remove
+                    </button>
+                  </form>
+                </div>
               ) : (
                 <>
                   <div>

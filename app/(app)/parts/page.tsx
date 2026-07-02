@@ -98,34 +98,39 @@ export default async function PartsPage({
                 {canManage ? (
                   <>
                     <td className="py-4" colSpan={6}>
-                      <form action={updatePartAction} className="grid gap-3 xl:grid-cols-[1.2fr_0.9fr_0.9fr_0.8fr_0.8fr_0.8fr_0.8fr_auto]">
-                        <input type="hidden" name="redirectTo" value="/parts" />
-                        <input type="hidden" name="successMessage" value="Part updated successfully." />
-                        <input type="hidden" name="partId" value={part.id} />
-                        <div className="space-y-2">
-                          <input name="name" defaultValue={part.name} className="field" />
-                          <div className="grid grid-cols-2 gap-2">
-                            <input name="category" defaultValue={part.category} className="field" />
-                            <input name="partNumber" defaultValue={part.partNumber} className="field" placeholder="Part #" />
+                      <div className="space-y-2">
+                        <form action={updatePartAction} className="grid gap-3 xl:grid-cols-[1.2fr_0.9fr_0.9fr_0.8fr_0.8fr_0.8fr_0.8fr_auto]">
+                          <input type="hidden" name="redirectTo" value="/parts" />
+                          <input type="hidden" name="successMessage" value="Part updated successfully." />
+                          <input type="hidden" name="partId" value={part.id} />
+                          <div className="space-y-2">
+                            <input name="name" defaultValue={part.name} className="field" />
+                            <div className="grid grid-cols-2 gap-2">
+                              <input name="category" defaultValue={part.category} className="field" />
+                              <input name="partNumber" defaultValue={part.partNumber} className="field" placeholder="Part #" />
+                            </div>
                           </div>
-                        </div>
-                        <input name="brand" defaultValue={part.brand} className="field" placeholder="Brand" />
-                        <div className="grid grid-cols-2 gap-2">
-                          <input name="stockQuantity" type="number" defaultValue={part.stockQuantity ?? ""} className="field" placeholder="Untracked stock" />
-                          <input name="unit" defaultValue={part.unit} className="field" />
-                        </div>
-                        <input name="standardPrice" type="number" step="0.01" defaultValue={part.standardPrice} className="field" />
-                        <input name="premiumPrice" type="number" step="0.01" defaultValue={part.premiumPrice} className="field" />
-                        <input name="luxuryPrice" type="number" step="0.01" defaultValue={part.luxuryPrice} className="field" />
-                        <label className="flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm">
-                          <input type="checkbox" name="isActive" defaultChecked={part.isActive} />
-                          Active
-                        </label>
-                        <div className="flex flex-col gap-2">
+                          <input name="brand" defaultValue={part.brand} className="field" placeholder="Brand" />
+                          <div className="grid grid-cols-2 gap-2">
+                            <input name="stockQuantity" type="number" defaultValue={part.stockQuantity ?? ""} className="field" placeholder="Untracked stock" />
+                            <input name="unit" defaultValue={part.unit} className="field" />
+                          </div>
+                          <input name="standardPrice" type="number" step="0.01" defaultValue={part.standardPrice} className="field" />
+                          <input name="premiumPrice" type="number" step="0.01" defaultValue={part.premiumPrice} className="field" />
+                          <input name="luxuryPrice" type="number" step="0.01" defaultValue={part.luxuryPrice} className="field" />
+                          <label className="flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm">
+                            <input type="checkbox" name="isActive" defaultChecked={part.isActive} />
+                            Active
+                          </label>
                           <button className="btn-primary">Save</button>
-                          <button formAction={deletePartAction} name="submitSuccessMessage" value="Part deleted successfully." className="text-sm text-rose-600">Delete</button>
-                        </div>
-                      </form>
+                        </form>
+                        <form action={deletePartAction} className="flex justify-end">
+                          <input type="hidden" name="redirectTo" value="/parts" />
+                          <input type="hidden" name="successMessage" value="Part deleted successfully." />
+                          <input type="hidden" name="partId" value={part.id} />
+                          <button className="text-sm text-rose-600">Delete</button>
+                        </form>
+                      </div>
                     </td>
                   </>
                 ) : (
