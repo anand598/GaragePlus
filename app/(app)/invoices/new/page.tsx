@@ -1,8 +1,13 @@
 import { InvoiceBuilder } from "@/app/(app)/invoices/new/invoice-builder";
-import { getCustomers, getParts, getServices, getVehicles, getWorkshop } from "@/lib/data";
+import { getCustomers, getInvoices, getParts, getServices, getVehicles, getWorkshop } from "@/lib/data";
 
-export default async function NewInvoicePage() {
+export default async function NewInvoicePage({
+  searchParams
+}: {
+  searchParams: Promise<{ q?: string; customerId?: string; vehicleId?: string }>;
+}) {
   const workshop = await getWorkshop();
+  const { q = "", customerId = "", vehicleId = "" } = await searchParams;
   const customers = await getCustomers();
   const customerById = new Map(customers.map((customer) => [customer.id, customer]));
   const vehicles = (await getVehicles()).map((vehicle) => {
@@ -37,6 +42,23 @@ export default async function NewInvoicePage() {
       luxuryPrice: part.luxuryPrice
     }))
   ];
+  const openInvoices = (await getInvoices())
+    .filter(
+      (invoice): invoice is typeof invoice & { paymentStatus: "UNPAID" | "PARTIAL" } => invoice.paymentStatus !== "PAID"
+    )
+    .map((invoice) => ({
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      customerId: invoice.customerId,
+      customerName: invoice.customer.name,
+      customerPhone: invoice.customer.phone,
+      vehicleId: invoice.vehicleId,
+      vehicleNumber: invoice.vehicle.vehicleNumber,
+      paymentStatus: invoice.paymentStatus,
+      workStatus: invoice.workStatus,
+      grandTotal: invoice.grandTotal,
+      amountPaid: invoice.amountPaid
+    }));
 
   return (
     <div className="space-y-4">
@@ -46,7 +68,16 @@ export default async function NewInvoicePage() {
           Search by vehicle number, customer name, or mobile number to start quickly. Price changes are not stored historically. Only final billed prices are written to invoice items.
         </p>
       </div>
-      <InvoiceBuilder customers={customers} vehicles={vehicles} catalog={catalog} defaultTax={workshop.taxPercentage} />
+      <InvoiceBuilder
+        customers={customers}
+        vehicles={vehicles}
+        catalog={catalog}
+        openInvoices={openInvoices}
+        defaultTax={workshop.taxPercentage}
+        initialLookupQuery={q}
+        initialCustomerId={customerId}
+        initialVehicleId={vehicleId}
+      />
     </div>
   );
 }

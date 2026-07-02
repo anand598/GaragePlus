@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { createVehicleAction } from "@/app/(app)/actions";
-import { ActionFeedbackBanner, Panel, SectionHeading } from "@/components/ui";
+import { ActionFeedbackBanner, Panel, SectionHeading, StatusBadge } from "@/components/ui";
 import { canCreateCustomers, requireSession } from "@/lib/auth";
-import { getCustomers, getVehicles } from "@/lib/data";
+import { getCustomers, getInvoices, getVehicles } from "@/lib/data";
+import { formatCurrency } from "@/lib/utils";
 
 export default async function VehiclesPage({
   searchParams
@@ -13,6 +14,7 @@ export default async function VehiclesPage({
   const { status, message, q = "", customerId = "" } = await searchParams;
   const vehicles = await getVehicles();
   const customers = await getCustomers();
+  const openInvoices = (await getInvoices()).filter((invoice) => invoice.paymentStatus !== "PAID");
   const canCreate = canCreateCustomers(session.role);
   const needle = q.trim().toLowerCase();
   const filteredVehicles = vehicles.filter((vehicle) => {
@@ -73,12 +75,44 @@ export default async function VehiclesPage({
         <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
         {filteredVehicles.map((vehicle) => (
           <div key={vehicle.id} className="rounded-3xl border border-slate-100 p-5">
+            {(() => {
+              const openInvoice = openInvoices.find((invoice) => invoice.vehicleId === vehicle.id);
+              return openInvoice ? (
+                <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{openInvoice.invoiceNumber}</span>
+                      <StatusBadge label={openInvoice.paymentStatus} tone={openInvoice.paymentStatus === "PARTIAL" ? "amber" : "red"} />
+                    </div>
+                    <Link href={`/invoices/${openInvoice.id}/edit`} className="text-blue-600 hover:text-blue-700">
+                      Continue
+                    </Link>
+                  </div>
+                  <p className="mt-1 text-xs text-amber-900">
+                    Balance due {formatCurrency(Math.max(openInvoice.grandTotal - openInvoice.amountPaid, 0))}
+                  </p>
+                </div>
+              ) : null;
+            })()}
             <p className="text-lg font-semibold text-slate-900">{vehicle.vehicleNumber}</p>
             <p className="mt-1 text-sm text-slate-500">{vehicle.brand} {vehicle.model}</p>
             <p className="mt-4 text-sm text-slate-700">Customer: {vehicle.customer?.name}</p>
             <p className="text-sm text-slate-600">Year: {vehicle.year ?? "-"}</p>
             <p className="text-sm text-slate-600">Fuel: {vehicle.fuelType ?? "-"}</p>
             <p className="text-sm text-slate-600">Odometer: {vehicle.odometer ?? 0} km</p>
+            <div className="mt-4 flex gap-3 text-sm">
+              <Link
+                href={`/invoices/new?customerId=${vehicle.customerId}&vehicleId=${vehicle.id}&q=${encodeURIComponent(vehicle.vehicleNumber)}`}
+                className="font-medium text-blue-600 hover:text-blue-700"
+              >
+                New Invoice
+              </Link>
+              {vehicle.customer && (
+                <Link href={`/customers/${vehicle.customerId}`} className="font-medium text-slate-600 hover:text-slate-900">
+                  Customer
+                </Link>
+              )}
+            </div>
           </div>
         ))}
         {filteredVehicles.length === 0 && (

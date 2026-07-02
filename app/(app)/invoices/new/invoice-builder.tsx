@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { createInvoiceAction, updateInvoiceAction } from "@/app/(app)/invoices/new/actions";
+import { StatusBadge } from "@/components/ui";
 import { formatCurrency } from "@/lib/utils";
 
 const itemSchema = z.object({
@@ -60,6 +61,20 @@ type InvoiceBuilderCatalogItem = {
   luxuryPrice: number;
 };
 
+type InvoiceBuilderOpenInvoice = {
+  id: string;
+  invoiceNumber: string;
+  customerId: string;
+  customerName: string;
+  customerPhone: string;
+  vehicleId: string;
+  vehicleNumber: string;
+  paymentStatus: "UNPAID" | "PARTIAL";
+  workStatus: "RECEIVED" | "IN_SERVICE" | "READY_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
+  grandTotal: number;
+  amountPaid: number;
+};
+
 type InvoiceBuilderMode = "create" | "edit";
 
 function matchesLookup(text: string | undefined, query: string) {
@@ -70,21 +85,27 @@ export function InvoiceBuilder({
   customers,
   vehicles,
   catalog,
+  openInvoices = [],
   defaultTax,
   mode = "create",
   invoiceId,
   initialValues,
   initialLookupQuery = "",
+  initialCustomerId,
+  initialVehicleId,
   amountPaid = 0
 }: {
   customers: InvoiceBuilderCustomer[];
   vehicles: InvoiceBuilderVehicle[];
   catalog: InvoiceBuilderCatalogItem[];
+  openInvoices?: InvoiceBuilderOpenInvoice[];
   defaultTax: number;
   mode?: InvoiceBuilderMode;
   invoiceId?: string;
   initialValues?: FormValues;
   initialLookupQuery?: string;
+  initialCustomerId?: string;
+  initialVehicleId?: string;
   amountPaid?: number;
 }) {
   const router = useRouter();
@@ -102,8 +123,8 @@ export function InvoiceBuilder({
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: initialValues ?? {
-      customerId: "",
-      vehicleId: "",
+      customerId: initialCustomerId ?? "",
+      vehicleId: initialVehicleId ?? "",
       pricingTier: "STANDARD",
       paymentStatus: "UNPAID",
       paymentMode: undefined,
@@ -149,6 +170,7 @@ export function InvoiceBuilder({
   );
 
   const matchedCustomerIds = new Set(matchedVehicles.map((vehicle) => vehicle.customerId));
+  const matchedVehicleIds = new Set(matchedVehicles.map((vehicle) => vehicle.id));
 
   const visibleCustomers = useMemo(() => {
     const base = normalizedLookup
@@ -170,6 +192,26 @@ export function InvoiceBuilder({
 
     return base;
   }, [normalizedLookup, customers, matchedCustomerIds, customerId, customerById]);
+
+  const visibleOpenInvoices = useMemo(() => {
+    if (!normalizedLookup) {
+      return [];
+    }
+
+    return openInvoices.filter((invoice) => {
+      const matchesCustomer = !customerId || invoice.customerId === customerId;
+      const matchesVehicle = !vehicleId || invoice.vehicleId === vehicleId;
+      const matchesQuery =
+        matchesLookup(invoice.invoiceNumber, normalizedLookup) ||
+        matchesLookup(invoice.customerName, normalizedLookup) ||
+        matchesLookup(invoice.customerPhone, normalizedLookup) ||
+        matchesLookup(invoice.vehicleNumber, normalizedLookup) ||
+        matchedCustomerIds.has(invoice.customerId) ||
+        matchedVehicleIds.has(invoice.vehicleId);
+
+      return matchesCustomer && matchesVehicle && matchesQuery;
+    });
+  }, [openInvoices, normalizedLookup, customerId, vehicleId, matchedCustomerIds, matchedVehicleIds]);
 
   const visibleVehicles = useMemo(() => {
     const base = vehicles.filter((vehicle) => {
@@ -312,7 +354,7 @@ export function InvoiceBuilder({
             </div>
 
             {normalizedLookup && (
-              <div className="grid gap-4 lg:grid-cols-2">
+              <div className={`grid gap-4 ${mode === "create" ? "xl:grid-cols-3" : "lg:grid-cols-2"}`}>
                 <div className="rounded-2xl border border-slate-100 p-4">
                   <p className="text-sm font-semibold text-slate-900">Matching Customers</p>
                   <div className="mt-3 space-y-2">
@@ -356,6 +398,50 @@ export function InvoiceBuilder({
                     {matchedVehicles.length === 0 && <p className="text-sm text-slate-500">No vehicle matches found.</p>}
                   </div>
                 </div>
+
+                {mode === "create" && (
+                  <div className="rounded-2xl border border-slate-100 p-4">
+                    <p className="text-sm font-semibold text-slate-900">Matching Open Invoices</p>
+                    <div className="mt-3 space-y-3">
+                      {visibleOpenInvoices.slice(0, 5).map((invoice) => (
+                        <div key={invoice.id} className="rounded-2xl border border-slate-100 px-4 py-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-medium text-slate-900">{invoice.invoiceNumber}</p>
+                              <p className="text-sm text-slate-500">
+                                {invoice.customerName} • {invoice.vehicleNumber}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                Balance due {formatCurrency(Math.max(invoice.grandTotal - invoice.amountPaid, 0))}
+                              </p>
+                            </div>
+                            <div className="flex flex-col items-end gap-2">
+                              <StatusBadge
+                                label={invoice.paymentStatus}
+                                tone={invoice.paymentStatus === "PARTIAL" ? "amber" : "red"}
+                              />
+                              <StatusBadge
+                                label={invoice.workStatus.replaceAll("_", " ")}
+                                tone={invoice.workStatus === "READY_FOR_DELIVERY" ? "violet" : "slate"}
+                              />
+                            </div>
+                          </div>
+                          <div className="mt-3 flex gap-3 text-sm">
+                            <Link href={`/invoices/${invoice.id}/edit`} className="font-medium text-blue-600 hover:text-blue-700">
+                              Continue Invoice
+                            </Link>
+                            <Link href={`/invoices/${invoice.id}`} className="font-medium text-slate-600 hover:text-slate-900">
+                              View
+                            </Link>
+                          </div>
+                        </div>
+                      ))}
+                      {visibleOpenInvoices.length === 0 && (
+                        <p className="text-sm text-slate-500">No open invoices match this search.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

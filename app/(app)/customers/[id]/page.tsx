@@ -1,6 +1,7 @@
+import Link from "next/link";
 import { deleteCustomerAction, deleteVehicleAction, updateCustomerAction, updateVehicleAction } from "@/app/(app)/actions";
 import { notFound } from "next/navigation";
-import { ActionFeedbackBanner, Panel, SectionHeading } from "@/components/ui";
+import { ActionFeedbackBanner, Panel, SectionHeading, StatusBadge } from "@/components/ui";
 import { canCreateCustomers, requireSession } from "@/lib/auth";
 import { getCustomer } from "@/lib/data";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -19,12 +20,23 @@ export default async function CustomerDetailPage({
   if (!data) notFound();
   const canManage = canCreateCustomers(session.role);
   const redirectTo = `/customers/${data.customer.id}`;
+  const openInvoices = data.invoices.filter((invoice) => invoice.paymentStatus !== "PAID");
 
   return (
     <div className="space-y-6">
       <ActionFeedbackBanner status={status} message={message} />
       <Panel className="p-6">
-        <SectionHeading title={data.customer.name} />
+        <SectionHeading
+          title={data.customer.name}
+          action={
+            <Link
+              href={`/invoices/new?customerId=${data.customer.id}&q=${encodeURIComponent(data.customer.phone)}`}
+              className="btn-primary"
+            >
+              New Invoice
+            </Link>
+          }
+        />
         {canManage ? (
           <form action={updateCustomerAction} className="grid gap-4 md:grid-cols-2">
             <input type="hidden" name="redirectTo" value={redirectTo} />
@@ -65,11 +77,57 @@ export default async function CustomerDetailPage({
         )}
       </Panel>
 
+      {openInvoices.length > 0 && (
+        <Panel className="p-6">
+          <SectionHeading title="Open Invoices" />
+          <div className="space-y-4">
+            {openInvoices.map((invoice) => (
+              <div key={invoice.id} className="flex flex-col gap-3 rounded-2xl border border-slate-100 p-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium text-slate-900">{invoice.invoiceNumber}</p>
+                    <StatusBadge label={invoice.paymentStatus} tone={invoice.paymentStatus === "PARTIAL" ? "amber" : "red"} />
+                    <StatusBadge label={invoice.workStatus.replaceAll("_", " ")} tone={invoice.workStatus === "READY_FOR_DELIVERY" ? "violet" : "slate"} />
+                  </div>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {invoice.vehicleId ? data.vehicles.find((vehicle) => vehicle.id === invoice.vehicleId)?.vehicleNumber : "-"} • {formatDate(invoice.createdAt)}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Balance due {formatCurrency(Math.max(invoice.grandTotal - invoice.amountPaid, 0))}
+                  </p>
+                </div>
+                <div className="flex gap-3 text-sm">
+                  <Link href={`/invoices/${invoice.id}/edit`} className="font-medium text-blue-600 hover:text-blue-700">
+                    Continue Invoice
+                  </Link>
+                  <Link href={`/invoices/${invoice.id}`} className="font-medium text-slate-600 hover:text-slate-900">
+                    View
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      )}
+
       <Panel className="p-6">
         <SectionHeading title="Vehicles" />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {data.vehicles.map((vehicle) => (
             <div key={vehicle.id} className="rounded-3xl border border-slate-100 p-5">
+              {(() => {
+                const openInvoice = openInvoices.find((invoice) => invoice.vehicleId === vehicle.id);
+                return openInvoice ? (
+                  <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-medium">Open invoice {openInvoice.invoiceNumber}</span>
+                      <Link href={`/invoices/${openInvoice.id}/edit`} className="text-blue-600 hover:text-blue-700">
+                        Continue
+                      </Link>
+                    </div>
+                  </div>
+                ) : null;
+              })()}
               {canManage ? (
                 <form action={updateVehicleAction} className="space-y-3">
                   <input type="hidden" name="redirectTo" value={redirectTo} />
@@ -88,6 +146,12 @@ export default async function CustomerDetailPage({
                   </div>
                   <div className="flex flex-wrap gap-3">
                     <button className="btn-primary">Save Vehicle</button>
+                    <Link
+                      href={`/invoices/new?customerId=${data.customer.id}&vehicleId=${vehicle.id}&q=${encodeURIComponent(vehicle.vehicleNumber)}`}
+                      className="btn-secondary"
+                    >
+                      New Invoice
+                    </Link>
                   </div>
                 </form>
               ) : (
@@ -96,6 +160,14 @@ export default async function CustomerDetailPage({
                   <p className="mt-1 text-sm text-slate-500">{vehicle.brand} {vehicle.model}</p>
                   <p className="mt-3 text-sm text-slate-600">Fuel: {vehicle.fuelType ?? "-"}</p>
                   <p className="text-sm text-slate-600">Odometer: {vehicle.odometer ?? 0} km</p>
+                  <div className="mt-4">
+                    <Link
+                      href={`/invoices/new?customerId=${data.customer.id}&vehicleId=${vehicle.id}&q=${encodeURIComponent(vehicle.vehicleNumber)}`}
+                      className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                    >
+                      Create Invoice
+                    </Link>
+                  </div>
                 </>
               )}
 
