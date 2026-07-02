@@ -19,9 +19,14 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             <h1 className="mt-2 text-3xl font-semibold">{invoice.invoiceNumber}</h1>
             <p className="mt-2 text-sm text-slate-500">{formatDate(invoice.createdAt)}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <StatusBadge label={invoice.paymentStatus} tone={invoice.paymentStatus === "PAID" ? "green" : "amber"} />
             <StatusBadge label={invoice.workStatus.replaceAll("_", " ")} tone={invoice.workStatus === "DELIVERED" ? "green" : "violet"} />
+            {invoice.paymentStatus !== "PAID" && (
+              <Link href={`/invoices/${invoice.id}/edit`} className="btn-secondary">
+                Edit Invoice
+              </Link>
+            )}
           </div>
         </div>
       </Panel>
@@ -60,6 +65,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               <div className="flex justify-between"><span>Discount</span><span>{formatCurrency(invoice.discount)}</span></div>
               <div className="flex justify-between"><span>Tax</span><span>{formatCurrency(invoice.taxAmount)}</span></div>
               <div className="flex justify-between border-t border-slate-200 pt-2 text-base font-semibold"><span>Grand Total</span><span>{formatCurrency(invoice.grandTotal)}</span></div>
+              <div className="flex justify-between"><span>Amount Paid</span><span>{formatCurrency(invoice.amountPaid)}</span></div>
+              <div className="flex justify-between font-medium text-amber-700"><span>Balance Due</span><span>{formatCurrency(Math.max(invoice.grandTotal - invoice.amountPaid, 0))}</span></div>
             </div>
             <Link href={`/invoices/${invoice.id}/print`} target="_blank" className="btn-secondary w-full">
               Print Invoice

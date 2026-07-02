@@ -35,6 +35,17 @@ type InvoiceItemInput = {
   unitPrice: number;
 };
 
+type InvoiceMutationInput = {
+  customerId: string;
+  vehicleId: string;
+  pricingTier: PricingTier;
+  workStatus: WorkStatus;
+  discount: number;
+  taxPercentage: number;
+  notes?: string;
+  items: InvoiceItemInput[];
+};
+
 function getTierPrice<T extends { standardPrice: number; premiumPrice: number; luxuryPrice: number }>(
   item: T,
   tier: PricingTier
@@ -46,6 +57,31 @@ function getTierPrice<T extends { standardPrice: number; premiumPrice: number; l
 
 function createId(prefix: string) {
   return `${prefix}_${randomUUID()}`;
+}
+
+function calculateInvoiceTotals(input: Pick<InvoiceMutationInput, "discount" | "taxPercentage" | "items">) {
+  const subtotal = input.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+  const taxable = Math.max(subtotal - input.discount, 0);
+  const taxAmount = (taxable * input.taxPercentage) / 100;
+  const grandTotal = taxable + taxAmount;
+
+  return {
+    subtotal,
+    taxAmount,
+    grandTotal
+  };
+}
+
+function derivePaymentStatus(grandTotal: number, amountPaid: number): PaymentStatus {
+  if (amountPaid <= 0) {
+    return "UNPAID";
+  }
+
+  if (amountPaid >= grandTotal) {
+    return "PAID";
+  }
+
+  return "PARTIAL";
 }
 
 function getPartItemDeltas(
@@ -1815,13 +1851,10 @@ export async function createInvoice(input: {
 }) {
   const workshop = await getWorkshop();
   const createdAt = new Date().toISOString();
+  const { subtotal, taxAmount, grandTotal } = calculateInvoiceTotals(input);
 
   if (!hasDatabase) {
     const result = await updateStore((store) => {
-      const subtotal = input.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-      const taxable = Math.max(subtotal - input.discount, 0);
-      const taxAmount = (taxable * input.taxPercentage) / 100;
-      const grandTotal = taxable + taxAmount;
       const amountPaid =
         input.paymentStatus === "PAID" ? grandTotal : input.paymentStatus === "PARTIAL" ? grandTotal / 2 : 0;
       const invoiceId = createId("inv");
@@ -1872,10 +1905,6 @@ export async function createInvoice(input: {
     return result;
   }
 
-  const subtotal = input.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  const taxable = Math.max(subtotal - input.discount, 0);
-  const taxAmount = (taxable * input.taxPercentage) / 100;
-  const grandTotal = taxable + taxAmount;
   const amountPaid = input.paymentStatus === "PAID" ? grandTotal : input.paymentStatus === "PARTIAL" ? grandTotal / 2 : 0;
   const workshopId = await getActiveWorkshopId();
 
@@ -1973,6 +2002,215 @@ export async function createInvoice(input: {
   revalidatePath("/payments");
   revalidatePath("/vehicle-status");
   return mapInvoice(result);
+}
+
+export async function updateInvoice(input: {
+  invoiceId: string;
+  customerId: string;
+  vehicleId: string;
+  pricingTier: PricingTier;
+  workStatus: WorkStatus;
+  discount: number;
+  taxPercentage: number;
+  notes?: string;
+  items: InvoiceItemInput[];
+}) {
+  const { subtotal, taxAmount, grandTotal } = calculateInvoiceTotals(input);
+
+  if (!hasDatabase) {
+    const result = await updateStore((store) => {
+      const invoice = store.invoices.find((entry) => entry.id === input.invoiceId);
+      if (!invoice) {
+        throw new Error("Invoice not found.");
+      }
+
+      if (invoice.paymentStatus === "PAID") {
+        throw new Error("Paid invoices cannot be modified.");
+      }
+
+      const customer = store.customers.find((entry) => entry.id === input.customerId);
+      const vehicle = store.vehicles.find((entry) => entry.id === input.vehicleId && entry.customerId === input.customerId);
+      if (!customer || !vehicle) {
+        throw new Error("Customer or vehicle not found for this workshop.");
+      }
+
+      const previousItems = store.invoiceItems.filter((entry) => entry.invoiceId === invoice.id);
+      restorePartStock(store.spareParts, previousItems);
+
+      const nextItems: InvoiceItem[] = input.items.map((item, index) => ({
+        id: `${invoice.id}_item_${index + 1}`,
+        invoiceId: invoice.id,
+        itemType: item.itemType,
+        sourceId: item.sourceId,
+        name: item.name,
+        category: item.category,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.quantity * item.unitPrice
+      }));
+
+      applyPartStockDeductionOrThrow(store.spareParts, nextItems);
+
+      const amountPaid = Math.min(invoice.amountPaid, grandTotal);
+      invoice.customerId = input.customerId;
+      invoice.vehicleId = input.vehicleId;
+      invoice.pricingTier = input.pricingTier;
+      invoice.workStatus = input.workStatus;
+      invoice.discount = input.discount;
+      invoice.taxPercentage = input.taxPercentage;
+      invoice.taxAmount = taxAmount;
+      invoice.subtotal = subtotal;
+      invoice.grandTotal = grandTotal;
+      invoice.amountPaid = amountPaid;
+      invoice.paymentStatus = derivePaymentStatus(grandTotal, amountPaid);
+      invoice.notes = input.notes;
+      invoice.deliveredAt = input.workStatus === "DELIVERED" ? invoice.deliveredAt ?? new Date().toISOString() : undefined;
+
+      store.invoiceItems = store.invoiceItems.filter((entry) => entry.invoiceId !== invoice.id);
+      store.invoiceItems.push(...nextItems);
+
+      return invoice;
+    });
+
+    revalidatePath("/invoices");
+    revalidatePath(`/invoices/${input.invoiceId}`);
+    revalidatePath(`/invoices/${input.invoiceId}/edit`);
+    revalidatePath("/dashboard");
+    revalidatePath("/payments");
+    revalidatePath("/vehicle-status");
+    revalidatePath("/customers");
+    return result;
+  }
+
+  const workshopId = await getActiveWorkshopId();
+  const result = await prisma.$transaction(async (tx) => {
+    const existing = await tx.invoice.findFirst({
+      where: { id: input.invoiceId, workshopId },
+      include: { items: true }
+    });
+    if (!existing) {
+      throw new Error("Invoice not found.");
+    }
+
+    if (existing.paymentStatus === "PAID") {
+      throw new Error("Paid invoices cannot be modified.");
+    }
+
+    const [customer, vehicle] = await Promise.all([
+      tx.customer.findFirst({
+        where: { id: input.customerId, workshopId }
+      }),
+      tx.vehicle.findFirst({
+        where: { id: input.vehicleId, customer: { workshopId }, customerId: input.customerId }
+      })
+    ]);
+
+    if (!customer || !vehicle) {
+      throw new Error("Customer or vehicle not found for this workshop.");
+    }
+
+    const previousDeltas = getPartItemDeltas(existing.items);
+    for (const [partId, quantity] of previousDeltas.entries()) {
+      const part = await tx.sparePart.findFirst({
+        where: { id: partId, workshopId }
+      });
+
+      if (part?.stockQuantity != null) {
+        await tx.sparePart.update({
+          where: { id: partId },
+          data: {
+            stockQuantity: {
+              increment: quantity
+            }
+          }
+        });
+      }
+    }
+
+    const nextDeltas = getPartItemDeltas(input.items);
+    for (const [partId, quantity] of nextDeltas.entries()) {
+      const part = await tx.sparePart.findFirst({
+        where: { id: partId, workshopId }
+      });
+
+      if (!part) {
+        throw new Error("One or more spare parts used in the invoice could not be found.");
+      }
+
+      if (part.stockQuantity != null && part.stockQuantity < quantity) {
+        throw new Error(`Insufficient stock for ${part.name}. Available: ${part.stockQuantity}, required: ${quantity}.`);
+      }
+    }
+
+    for (const [partId, quantity] of nextDeltas.entries()) {
+      const part = await tx.sparePart.findFirst({
+        where: { id: partId, workshopId }
+      });
+
+      if (part?.stockQuantity != null) {
+        await tx.sparePart.update({
+          where: { id: partId },
+          data: {
+            stockQuantity: {
+              decrement: quantity
+            }
+          }
+        });
+      }
+    }
+
+    const amountPaid = Math.min(existing.amountPaid, grandTotal);
+    await tx.invoice.update({
+      where: { id: input.invoiceId },
+      data: {
+        customerId: input.customerId,
+        vehicleId: input.vehicleId,
+        pricingTier: input.pricingTier,
+        workStatus: input.workStatus,
+        discount: input.discount,
+        taxPercentage: input.taxPercentage,
+        taxAmount,
+        subtotal,
+        grandTotal,
+        amountPaid,
+        paymentStatus: derivePaymentStatus(grandTotal, amountPaid),
+        notes: input.notes,
+        deliveredAt: input.workStatus === "DELIVERED" ? existing.deliveredAt ?? new Date() : null
+      }
+    });
+
+    await tx.invoiceItem.deleteMany({
+      where: { invoiceId: input.invoiceId }
+    });
+
+    if (input.items.length > 0) {
+      await tx.invoiceItem.createMany({
+        data: input.items.map((item) => ({
+          invoiceId: input.invoiceId,
+          itemType: item.itemType,
+          sourceId: item.sourceId,
+          name: item.name,
+          category: item.category,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.quantity * item.unitPrice
+        }))
+      });
+    }
+
+    return tx.invoice.findUnique({
+      where: { id: input.invoiceId }
+    });
+  });
+
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${input.invoiceId}`);
+  revalidatePath(`/invoices/${input.invoiceId}/edit`);
+  revalidatePath("/dashboard");
+  revalidatePath("/payments");
+  revalidatePath("/vehicle-status");
+  revalidatePath("/customers");
+  return mapInvoice(result!);
 }
 
 export async function sendReminder(input: {

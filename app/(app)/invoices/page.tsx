@@ -16,6 +16,7 @@ export default async function InvoicesPage({
       !needle ||
       invoice.invoiceNumber.toLowerCase().includes(needle) ||
       invoice.customer.name.toLowerCase().includes(needle) ||
+      invoice.customer.phone.toLowerCase().includes(needle) ||
       invoice.vehicle.vehicleNumber.toLowerCase().includes(needle);
     const matchesWorkStatus = !workStatus || invoice.workStatus === workStatus;
     const matchesPaymentStatus = !paymentStatus || invoice.paymentStatus === paymentStatus;
@@ -64,6 +65,7 @@ export default async function InvoicesPage({
               <th className="py-3 font-medium">Work Status</th>
               <th className="py-3 font-medium">Payment</th>
               <th className="py-3 font-medium">Total</th>
+              <th className="py-3 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -82,11 +84,23 @@ export default async function InvoicesPage({
                   <StatusBadge label={invoice.paymentStatus} tone={invoice.paymentStatus === "PAID" ? "green" : invoice.paymentStatus === "PARTIAL" ? "amber" : "red"} />
                 </td>
                 <td className="py-4 font-semibold">{formatCurrency(invoice.grandTotal)}</td>
+                <td className="py-4">
+                  <div className="flex gap-3 text-sm">
+                    <Link href={`/invoices/${invoice.id}`} className="font-medium text-slate-700 hover:text-blue-600">
+                      View
+                    </Link>
+                    {invoice.paymentStatus !== "PAID" && (
+                      <Link href={`/invoices/${invoice.id}/edit`} className="font-medium text-blue-600 hover:text-blue-700">
+                        Edit
+                      </Link>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))}
             {filteredInvoices.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-sm text-slate-500">
+                <td colSpan={8} className="py-8 text-center text-sm text-slate-500">
                   No invoices match the current filters.
                 </td>
               </tr>
