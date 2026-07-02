@@ -1,0 +1,215 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  MANAGER
+  CASHIER
+  STAFF
+}
+
+enum PricingTier {
+  STANDARD
+  PREMIUM
+  LUXURY
+}
+
+enum PaymentStatus {
+  PAID
+  UNPAID
+  PARTIAL
+}
+
+enum PaymentMode {
+  CASH
+  UPI
+  CARD
+  BANK_TRANSFER
+}
+
+enum WorkStatus {
+  RECEIVED
+  IN_SERVICE
+  READY_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+model Workshop {
+  id             String    @id @default(cuid())
+  name           String
+  logoUrl        String?
+  phone          String
+  email          String
+  address        String
+  gstNumber      String?
+  invoicePrefix  String    @default("INV")
+  taxPercentage  Float     @default(18)
+  paymentQrCode  String?
+  businessHours  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  users          User[]
+  customers      Customer[]
+  services       Service[]
+  spareParts     SparePart[]
+  invoices       Invoice[]
+  reminderActivities ReminderActivity[]
+}
+
+model User {
+  id           String    @id @default(cuid())
+  workshopId   String
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         Role
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  workshop     Workshop  @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  passwordResetTokens PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Customer {
+  id          String    @id @default(cuid())
+  workshopId  String
+  name        String
+  phone       String
+  email       String?
+  address     String?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workshop    Workshop  @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  vehicles    Vehicle[]
+  invoices    Invoice[]
+}
+
+model Vehicle {
+  id            String    @id @default(cuid())
+  customerId    String
+  vehicleNumber String
+  brand         String
+  model         String
+  year          Int?
+  fuelType      String?
+  odometer      Int?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  customer      Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  invoices      Invoice[]
+
+  @@unique([customerId, vehicleNumber])
+}
+
+model Service {
+  id             String    @id @default(cuid())
+  workshopId     String
+  name           String
+  category       String
+  description    String?
+  estimatedTime  String?
+  standardPrice  Float
+  premiumPrice   Float
+  luxuryPrice    Float
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  workshop       Workshop  @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+}
+
+model SparePart {
+  id             String    @id @default(cuid())
+  workshopId     String
+  name           String
+  category       String
+  brand          String?
+  partNumber     String?
+  unit           String
+  standardPrice  Float
+  premiumPrice   Float
+  luxuryPrice    Float
+  stockQuantity  Int?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  workshop       Workshop  @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+}
+
+model Invoice {
+  id               String         @id @default(cuid())
+  workshopId       String
+  customerId       String
+  vehicleId        String
+  invoiceNumber    String         @unique
+  pricingTier      PricingTier
+  paymentStatus    PaymentStatus
+  paymentMode      PaymentMode?
+  workStatus       WorkStatus     @default(RECEIVED)
+  subtotal         Float
+  discount         Float          @default(0)
+  taxPercentage    Float          @default(18)
+  taxAmount        Float          @default(0)
+  grandTotal       Float
+  amountPaid       Float          @default(0)
+  notes            String?
+  dueDate          DateTime?
+  deliveredAt      DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  workshop         Workshop       @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  customer         Customer       @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  vehicle          Vehicle        @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  items            InvoiceItem[]
+  reminderActivities ReminderActivity[]
+}
+
+model InvoiceItem {
+  id          String      @id @default(cuid())
+  invoiceId   String
+  itemType    String
+  sourceId    String?
+  name        String
+  category    String?
+  quantity    Float       @default(1)
+  unitPrice   Float
+  totalPrice  Float
+  invoice     Invoice     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+model ReminderActivity {
+  id           String     @id @default(cuid())
+  workshopId   String
+  invoiceId    String
+  channel      String
+  customerName String
+  vehicleNumber String
+  workStatus   WorkStatus
+  message      String
+  sentAt       DateTime   @default(now())
+  sentByName   String?
+  workshop     Workshop   @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  invoice      Invoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([workshopId, sentAt])
+  @@index([invoiceId])
+}

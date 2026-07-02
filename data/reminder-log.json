@@ -1,0 +1,35 @@
+[
+  {
+    "id": "reminder_c8fb05fa-fea5-43d1-bd82-16c96de399aa",
+    "invoiceId": "inv_4",
+    "channel": "WHATSAPP",
+    "customerName": "Mahesh",
+    "vehicleNumber": "TS10GH1111",
+    "workStatus": "IN_SERVICE",
+    "message": "Hi Mahesh, your vehicle TS10GH1111 is currently under service.",
+    "sentAt": "2026-07-01T03:42:19.215Z",
+    "sentByName": "Garage Owner"
+  },
+  {
+    "id": "reminder_a8f4455b-22ca-42a4-ac84-9f43b51c6d37",
+    "invoiceId": "inv_2",
+    "channel": "WHATSAPP",
+    "customerName": "Kumar",
+    "vehicleNumber": "TS08CD5678",
+    "workStatus": "READY_FOR_DELIVERY",
+    "message": "Hi Kumar, your vehicle TS08CD5678 is ready for delivery. Total amount: Rs 8024.",
+    "sentAt": "2026-07-01T03:42:16.917Z",
+    "sentByName": "Garage Owner"
+  },
+  {
+    "id": "reminder_b55484c8-f796-4c51-b705-131267d6d509",
+    "invoiceId": "inv_1",
+    "channel": "WHATSAPP",
+    "customerName": "Ramesh",
+    "vehicleNumber": "TS09AB1234",
+    "workStatus": "IN_SERVICE",
+    "message": "Hi Ramesh, your vehicle TS09AB1234 is currently under service.",
+    "sentAt": "2026-07-01T03:42:12.981Z",
+    "sentByName": "Garage Owner"
+  }
+]

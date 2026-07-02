@@ -1,0 +1,2 @@
+ALTER TABLE "SparePart"
+ALTER COLUMN "stockQuantity" DROP NOT NULL;
