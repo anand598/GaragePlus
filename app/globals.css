@@ -7,17 +7,24 @@
 }
 
 body {
-  @apply bg-app-gradient text-slate-900 antialiased;
+  @apply min-h-screen bg-app-gradient text-slate-900 antialiased;
   font-family: "Avenir Next", "Segoe UI", sans-serif;
+  background-attachment: fixed;
 }
 
 * {
+  box-sizing: border-box;
   scrollbar-width: thin;
   scrollbar-color: #cbd5e1 transparent;
 }
 
+*::selection {
+  background: rgba(37, 99, 235, 0.18);
+  color: #0f172a;
+}
+
 .panel {
-  @apply rounded-3xl border border-white/70 bg-white/90 shadow-panel backdrop-blur;
+  @apply rounded-[30px] border border-white/70 bg-white/90 shadow-panel backdrop-blur;
 }
 
 h1,
@@ -27,16 +34,25 @@ h4,
 h5,
 h6 {
   font-family: "Trebuchet MS", "Avenir Next Condensed", sans-serif;
+  letter-spacing: -0.02em;
 }
 
 .field {
-  @apply w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100;
+  @apply w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition duration-200 placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-400 focus:ring-4 focus:ring-blue-100;
+}
+
+select.field {
+  @apply pr-10 text-slate-700;
+}
+
+textarea.field {
+  @apply leading-6;
 }
 
 .btn-primary {
-  @apply inline-flex items-center justify-center rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700;
+  @apply inline-flex items-center justify-center rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(37,99,235,0.18)] transition duration-200 hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-[0_16px_28px_rgba(37,99,235,0.22)] active:translate-y-0;
 }
 
 .btn-secondary {
-  @apply inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50;
+  @apply inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 active:translate-y-0;
 }

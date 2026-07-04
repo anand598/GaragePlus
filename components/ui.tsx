@@ -19,9 +19,9 @@ export function SectionHeading({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-5 flex items-center justify-between gap-3">
+    <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
-      {action}
+      {action ? <div className="text-sm text-slate-500 sm:text-right">{action}</div> : null}
     </div>
   );
 }
@@ -42,7 +42,7 @@ export function StatusBadge({
     violet: "bg-violet-50 text-violet-700"
   };
 
-  return <span className={cn("rounded-full px-3 py-1 text-xs font-medium", styles[tone])}>{label}</span>;
+  return <span className={cn("rounded-full px-3 py-1 text-xs font-medium tracking-[0.02em]", styles[tone])}>{label}</span>;
 }
 
 export function ActionFeedbackBanner({
