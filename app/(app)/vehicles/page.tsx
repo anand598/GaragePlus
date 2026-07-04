@@ -94,7 +94,9 @@ export default async function VehiclesPage({
                 </div>
               ) : null;
             })()}
-            <p className="text-lg font-semibold text-slate-900">{vehicle.vehicleNumber}</p>
+            <Link href={`/vehicles/${vehicle.id}`} className="text-lg font-semibold text-slate-900 hover:text-blue-600">
+              {vehicle.vehicleNumber}
+            </Link>
             <p className="mt-1 text-sm text-slate-500">{vehicle.brand} {vehicle.model}</p>
             <p className="mt-4 text-sm text-slate-700">Customer: {vehicle.customer?.name}</p>
             <p className="text-sm text-slate-600">Year: {vehicle.year ?? "-"}</p>
@@ -112,6 +114,9 @@ export default async function VehiclesPage({
                   Customer
                 </Link>
               )}
+              <Link href={`/vehicles/${vehicle.id}`} className="font-medium text-slate-600 hover:text-slate-900">
+                Details
+              </Link>
             </div>
           </div>
         ))}

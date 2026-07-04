@@ -152,21 +152,31 @@ export default async function CustomerDetailPage({
                     >
                       New Invoice
                     </Link>
+                    <Link href={`/vehicles/${vehicle.id}`} className="btn-secondary">
+                      Vehicle Details
+                    </Link>
                   </div>
                 </form>
               ) : (
                 <>
-                  <p className="font-semibold text-slate-900">{vehicle.vehicleNumber}</p>
+                  <Link href={`/vehicles/${vehicle.id}`} className="font-semibold text-slate-900 hover:text-blue-600">
+                    {vehicle.vehicleNumber}
+                  </Link>
                   <p className="mt-1 text-sm text-slate-500">{vehicle.brand} {vehicle.model}</p>
                   <p className="mt-3 text-sm text-slate-600">Fuel: {vehicle.fuelType ?? "-"}</p>
                   <p className="text-sm text-slate-600">Odometer: {vehicle.odometer ?? 0} km</p>
                   <div className="mt-4">
-                    <Link
-                      href={`/invoices/new?customerId=${data.customer.id}&vehicleId=${vehicle.id}&q=${encodeURIComponent(vehicle.vehicleNumber)}`}
-                      className="text-sm font-medium text-blue-600 hover:text-blue-700"
-                    >
-                      Create Invoice
-                    </Link>
+                    <div className="flex gap-3">
+                      <Link
+                        href={`/invoices/new?customerId=${data.customer.id}&vehicleId=${vehicle.id}&q=${encodeURIComponent(vehicle.vehicleNumber)}`}
+                        className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                      >
+                        Create Invoice
+                      </Link>
+                      <Link href={`/vehicles/${vehicle.id}`} className="text-sm font-medium text-slate-600 hover:text-slate-900">
+                        Details
+                      </Link>
+                    </div>
                   </div>
                 </>
               )}

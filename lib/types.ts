@@ -140,6 +140,15 @@ export interface ReminderActivity {
   sentByName?: string;
 }
 
+export interface InvoiceActivity {
+  id: string;
+  invoiceId: string;
+  action: "CREATED" | "UPDATED" | "PAYMENT_UPDATED" | "WORK_STATUS_UPDATED";
+  details: string;
+  createdAt: string;
+  actorName?: string;
+}
+
 export interface AppStore {
   workshop: Workshop;
   users: User[];

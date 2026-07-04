@@ -2,11 +2,14 @@ import { createHash, randomBytes, randomUUID } from "crypto";
 import { PricingTier as PrismaPricingTier, PaymentStatus as PrismaPaymentStatus, PaymentMode as PrismaPaymentMode, Role as PrismaRole, WorkStatus as PrismaWorkStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
+import { appendInvoiceActivity, getInvoiceActivities } from "@/lib/invoice-activities";
 import { prisma } from "@/lib/prisma";
 import { appendReminderActivity, getReminderActivities } from "@/lib/reminders";
 import { readStore, updateStore } from "@/lib/store";
+import { formatCurrency } from "@/lib/utils";
 import type {
   Customer,
+  InvoiceActivity,
   Invoice,
   InvoiceItem,
   PaymentMode,
@@ -455,6 +458,68 @@ function mapReminderActivity(activity: {
     sentAt: activity.sentAt.toISOString(),
     sentByName: activity.sentByName ?? undefined
   };
+}
+
+function mapInvoiceActivity(activity: {
+  id: string;
+  invoiceId: string;
+  action: string;
+  details: string;
+  actorName: string | null;
+  createdAt: Date;
+}): InvoiceActivity {
+  return {
+    id: activity.id,
+    invoiceId: activity.invoiceId,
+    action: activity.action as InvoiceActivity["action"],
+    details: activity.details,
+    actorName: activity.actorName ?? undefined,
+    createdAt: activity.createdAt.toISOString()
+  };
+}
+
+async function getActivityActorName() {
+  try {
+    const session = await getSession();
+    return session?.name;
+  } catch {
+    return undefined;
+  }
+}
+
+async function recordInvoiceActivity(input: {
+  workshopId: string;
+  invoiceId: string;
+  action: InvoiceActivity["action"];
+  details: string;
+  actorName?: string;
+}) {
+  const activity: InvoiceActivity = {
+    id: createId("invoice_activity"),
+    invoiceId: input.invoiceId,
+    action: input.action,
+    details: input.details,
+    actorName: input.actorName,
+    createdAt: new Date().toISOString()
+  };
+
+  if (!hasDatabase) {
+    await appendInvoiceActivity(activity);
+    return activity;
+  }
+
+  const savedActivity = await prisma.invoiceActivity.create({
+    data: {
+      workshopId: input.workshopId,
+      invoiceId: input.invoiceId,
+      action: input.action,
+      details: input.details,
+      actorName: input.actorName,
+      createdAt: new Date(activity.createdAt)
+    }
+  });
+
+  return mapInvoiceActivity(savedActivity);
 }
 
 async function getPrimaryWorkshopDb() {
@@ -1086,6 +1151,49 @@ export async function getVehicles() {
   }));
 }
 
+export async function getVehicle(id: string) {
+  if (!hasDatabase) {
+    const store = await readStore();
+    const vehicle = store.vehicles.find((entry) => entry.id === id);
+    if (!vehicle) return null;
+    const customer = store.customers.find((entry) => entry.id === vehicle.customerId);
+    if (!customer) return null;
+    const invoices = store.invoices
+      .filter((invoice) => invoice.vehicleId === id)
+      .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
+    return {
+      vehicle,
+      customer,
+      invoices,
+      totalBilled: invoices.reduce((sum, invoice) => sum + invoice.grandTotal, 0),
+      totalPaid: invoices.reduce((sum, invoice) => sum + invoice.amountPaid, 0),
+      openInvoices: invoices.filter((invoice) => invoice.paymentStatus !== "PAID")
+    };
+  }
+
+  const workshopId = await getActiveWorkshopId();
+  const vehicle = await prisma.vehicle.findFirst({
+    where: { id, customer: { workshopId } },
+    include: {
+      customer: true,
+      invoices: {
+        orderBy: { createdAt: "desc" }
+      }
+    }
+  });
+  if (!vehicle) return null;
+
+  const mappedInvoices = vehicle.invoices.map(mapInvoice);
+  return {
+    vehicle: mapVehicle(vehicle),
+    customer: mapCustomer(vehicle.customer),
+    invoices: mappedInvoices,
+    totalBilled: mappedInvoices.reduce((sum, invoice) => sum + invoice.grandTotal, 0),
+    totalPaid: mappedInvoices.reduce((sum, invoice) => sum + invoice.amountPaid, 0),
+    openInvoices: mappedInvoices.filter((invoice) => invoice.paymentStatus !== "PAID")
+  };
+}
+
 export async function createVehicle(input: {
   customerId: string;
   vehicleNumber: string;
@@ -1112,6 +1220,7 @@ export async function createVehicle(input: {
     });
 
     revalidatePath("/vehicles");
+    revalidatePath(`/vehicles/${vehicle.id}`);
     revalidatePath("/customers");
     revalidatePath(`/customers/${input.customerId}`);
     revalidatePath("/invoices/new");
@@ -1135,11 +1244,14 @@ export async function createVehicle(input: {
         odometer: input.odometer
       }
     });
-  }
 
-  revalidatePath("/vehicles");
-  revalidatePath("/customers");
-  revalidatePath("/invoices/new");
+    revalidatePath("/vehicles");
+    revalidatePath(`/vehicles/${vehicle.id}`);
+    revalidatePath("/customers");
+    revalidatePath(`/customers/${input.customerId}`);
+    revalidatePath("/invoices/new");
+    return mapVehicle(vehicle);
+  }
 }
 
 export async function updateVehicle(input: {
@@ -1222,6 +1334,7 @@ export async function deleteVehicle(vehicleId: string) {
   }
 
   revalidatePath("/vehicles");
+  revalidatePath(`/vehicles/${vehicleId}`);
   revalidatePath("/customers");
   revalidatePath("/invoices/new");
 }
@@ -1550,26 +1663,39 @@ export async function updateInvoicePayment(input: {
   paymentMode?: PaymentMode;
   amountPaid: number;
 }) {
+  const actorName = await getActivityActorName();
+  let previousStatus: PaymentStatus | undefined;
+  let nextAmountPaid = 0;
+  let grandTotal = 0;
+  let workshopId: string | undefined;
+
   if (!hasDatabase) {
     await updateStore((store) => {
       const invoice = store.invoices.find((entry) => entry.id === input.invoiceId);
       if (!invoice) return;
+      previousStatus = invoice.paymentStatus;
+      grandTotal = invoice.grandTotal;
       invoice.paymentStatus = input.paymentStatus;
       invoice.paymentMode = input.paymentMode;
       invoice.amountPaid = Math.min(input.amountPaid, invoice.grandTotal);
+      nextAmountPaid = invoice.amountPaid;
+      workshopId = invoice.workshopId;
     });
   } else {
-    const workshopId = await getActiveWorkshopId();
+    workshopId = await getActiveWorkshopId();
     const invoice = await prisma.invoice.findFirst({
       where: { id: input.invoiceId, workshopId }
     });
     if (invoice) {
+      previousStatus = invoice.paymentStatus;
+      grandTotal = invoice.grandTotal;
+      nextAmountPaid = Math.min(input.amountPaid, invoice.grandTotal);
       await prisma.invoice.update({
         where: { id: input.invoiceId },
         data: {
           paymentStatus: input.paymentStatus,
           paymentMode: input.paymentMode,
-          amountPaid: Math.min(input.amountPaid, invoice.grandTotal)
+          amountPaid: nextAmountPaid
         }
       });
     }
@@ -1579,18 +1705,32 @@ export async function updateInvoicePayment(input: {
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${input.invoiceId}`);
   revalidatePath("/dashboard");
+
+  if (workshopId && previousStatus) {
+    await recordInvoiceActivity({
+      workshopId,
+      invoiceId: input.invoiceId,
+      action: "PAYMENT_UPDATED",
+      details: `Payment changed from ${previousStatus.toLowerCase()} to ${input.paymentStatus.toLowerCase()}. Collected ${formatCurrency(nextAmountPaid)} of ${formatCurrency(grandTotal)}.`,
+      actorName
+    });
+  }
 }
 
 export async function updateInvoiceWorkStatus(input: {
   invoiceId: string;
   workStatus: WorkStatus;
 }) {
+  const actorName = await getActivityActorName();
+  let previousStatus: WorkStatus | undefined;
+  let workshopId: string | undefined;
+
   if (!hasDatabase) {
     await updateStore((store) => {
       const invoice = store.invoices.find((entry) => entry.id === input.invoiceId);
       if (!invoice) return;
 
-      const previousStatus = invoice.workStatus;
+      previousStatus = invoice.workStatus;
       if (previousStatus !== "CANCELLED" && input.workStatus === "CANCELLED") {
         const items = store.invoiceItems.filter((entry) => entry.invoiceId === invoice.id);
         restorePartStock(store.spareParts, items);
@@ -1607,15 +1747,17 @@ export async function updateInvoiceWorkStatus(input: {
       } else {
         invoice.deliveredAt = undefined;
       }
+      workshopId = invoice.workshopId;
     });
   } else {
-    const workshopId = await getActiveWorkshopId();
+    workshopId = await getActiveWorkshopId();
     await prisma.$transaction(async (tx) => {
       const existing = await tx.invoice.findFirst({
         where: { id: input.invoiceId, workshopId },
         include: { items: true }
       });
       if (!existing) return;
+      previousStatus = existing.workStatus;
 
       if (existing.workStatus !== "CANCELLED" && input.workStatus === "CANCELLED") {
         const deltas = getPartItemDeltas(existing.items);
@@ -1679,6 +1821,16 @@ export async function updateInvoiceWorkStatus(input: {
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${input.invoiceId}`);
   revalidatePath("/dashboard");
+
+  if (workshopId && previousStatus && previousStatus !== input.workStatus) {
+    await recordInvoiceActivity({
+      workshopId,
+      invoiceId: input.invoiceId,
+      action: "WORK_STATUS_UPDATED",
+      details: `Work status changed from ${previousStatus.replaceAll("_", " ").toLowerCase()} to ${input.workStatus.replaceAll("_", " ").toLowerCase()}.`,
+      actorName
+    });
+  }
 }
 
 export async function getDashboardData() {
@@ -1799,6 +1951,24 @@ export async function getReminderHistory() {
   return activities.map(mapReminderActivity);
 }
 
+export async function getInvoiceHistory(invoiceId: string) {
+  if (!hasDatabase) {
+    const activities = await getInvoiceActivities();
+    return activities.filter((entry) => entry.invoiceId === invoiceId);
+  }
+
+  const workshopId = await getActiveWorkshopId();
+  const activities = await prisma.invoiceActivity.findMany({
+    where: {
+      invoiceId,
+      workshopId
+    },
+    orderBy: { createdAt: "desc" }
+  });
+
+  return activities.map(mapInvoiceActivity);
+}
+
 export async function searchRecords(query: string) {
   const needle = query.trim().toLowerCase();
   if (!needle) {
@@ -1850,6 +2020,7 @@ export async function createInvoice(input: {
   items: InvoiceItemInput[];
 }) {
   const workshop = await getWorkshop();
+  const actorName = await getActivityActorName();
   const createdAt = new Date().toISOString();
   const { subtotal, taxAmount, grandTotal } = calculateInvoiceTotals(input);
 
@@ -1902,6 +2073,13 @@ export async function createInvoice(input: {
     revalidatePath("/dashboard");
     revalidatePath("/payments");
     revalidatePath("/vehicle-status");
+    await recordInvoiceActivity({
+      workshopId: workshop.id,
+      invoiceId: result.id,
+      action: "CREATED",
+      details: `Created invoice for ${formatCurrency(result.grandTotal)} with ${result.paymentStatus.toLowerCase()} payment status.`,
+      actorName
+    });
     return result;
   }
 
@@ -2001,6 +2179,13 @@ export async function createInvoice(input: {
   revalidatePath("/dashboard");
   revalidatePath("/payments");
   revalidatePath("/vehicle-status");
+  await recordInvoiceActivity({
+    workshopId,
+    invoiceId: result.id,
+    action: "CREATED",
+    details: `Created invoice for ${formatCurrency(result.grandTotal)} with ${result.paymentStatus.toLowerCase()} payment status.`,
+    actorName
+  });
   return mapInvoice(result);
 }
 
@@ -2015,7 +2200,9 @@ export async function updateInvoice(input: {
   notes?: string;
   items: InvoiceItemInput[];
 }) {
+  const actorName = await getActivityActorName();
   const { subtotal, taxAmount, grandTotal } = calculateInvoiceTotals(input);
+  let workshopId: string | undefined;
 
   if (!hasDatabase) {
     const result = await updateStore((store) => {
@@ -2068,6 +2255,7 @@ export async function updateInvoice(input: {
 
       store.invoiceItems = store.invoiceItems.filter((entry) => entry.invoiceId !== invoice.id);
       store.invoiceItems.push(...nextItems);
+      workshopId = invoice.workshopId;
 
       return invoice;
     });
@@ -2079,10 +2267,19 @@ export async function updateInvoice(input: {
     revalidatePath("/payments");
     revalidatePath("/vehicle-status");
     revalidatePath("/customers");
+    if (workshopId) {
+      await recordInvoiceActivity({
+        workshopId,
+        invoiceId: input.invoiceId,
+        action: "UPDATED",
+        details: `Invoice updated to ${formatCurrency(grandTotal)} with ${input.items.length} line item(s) and ${derivePaymentStatus(grandTotal, result.amountPaid).toLowerCase()} payment status.`,
+        actorName
+      });
+    }
     return result;
   }
 
-  const workshopId = await getActiveWorkshopId();
+  workshopId = await getActiveWorkshopId();
   const result = await prisma.$transaction(async (tx) => {
     const existing = await tx.invoice.findFirst({
       where: { id: input.invoiceId, workshopId },
@@ -2210,6 +2407,13 @@ export async function updateInvoice(input: {
   revalidatePath("/payments");
   revalidatePath("/vehicle-status");
   revalidatePath("/customers");
+  await recordInvoiceActivity({
+    workshopId,
+    invoiceId: input.invoiceId,
+    action: "UPDATED",
+    details: `Invoice updated to ${formatCurrency(grandTotal)} with ${input.items.length} line item(s) and ${derivePaymentStatus(grandTotal, result!.amountPaid).toLowerCase()} payment status.`,
+    actorName
+  });
   return mapInvoice(result!);
 }
 

@@ -60,6 +60,7 @@ model Workshop {
   services       Service[]
   spareParts     SparePart[]
   invoices       Invoice[]
+  invoiceActivities InvoiceActivity[]
   reminderActivities ReminderActivity[]
 }
 
@@ -180,6 +181,7 @@ model Invoice {
   customer         Customer       @relation(fields: [customerId], references: [id], onDelete: Restrict)
   vehicle          Vehicle        @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
   items            InvoiceItem[]
+  activities       InvoiceActivity[]
   reminderActivities ReminderActivity[]
 }
 
@@ -194,6 +196,21 @@ model InvoiceItem {
   unitPrice   Float
   totalPrice  Float
   invoice     Invoice     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+model InvoiceActivity {
+  id         String   @id @default(cuid())
+  workshopId String
+  invoiceId  String
+  action     String
+  details    String
+  actorName  String?
+  createdAt  DateTime @default(now())
+  workshop   Workshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  invoice    Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([workshopId, createdAt])
+  @@index([invoiceId, createdAt])
 }
 
 model ReminderActivity {
