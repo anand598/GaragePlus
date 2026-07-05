@@ -38,10 +38,13 @@ export function LoginForm({ resetSuccess = false }: { resetSuccess?: boolean }) 
   });
 
   return (
-    <form onSubmit={onSubmit} className="panel w-full max-w-md p-8">
+    <form onSubmit={onSubmit} className="panel w-full max-w-[520px] p-8 lg:p-10">
       <div className="mb-8">
-        <h1 className="font-[family-name:var(--font-heading)] text-4xl font-semibold text-slate-900">GaragePro</h1>
-        <p className="mt-2 text-sm text-slate-500">Sign in to manage billing, service status, and customer history.</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-600">Sign In</p>
+        <h1 className="mt-3 font-[family-name:var(--font-heading)] text-4xl font-semibold text-slate-900">GaragePro</h1>
+        <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">
+          Manage workshop billing, service progress, and customer activity from one focused dashboard.
+        </p>
       </div>
 
       {resetSuccess && (
@@ -50,27 +53,31 @@ export function LoginForm({ resetSuccess = false }: { resetSuccess?: boolean }) 
         </div>
       )}
 
-      <div className="space-y-4">
+      <div className="space-y-5">
         <div>
           <label className="mb-2 block text-sm font-medium text-slate-700">Email</label>
-          <input {...register("email")} className="field" />
+          <input {...register("email")} className="field" placeholder="owner@garagepro.app" />
           {errors.email && <p className="mt-2 text-xs text-rose-600">{errors.email.message}</p>}
         </div>
 
         <div>
           <label className="mb-2 block text-sm font-medium text-slate-700">Password</label>
-          <input type="password" {...register("password")} className="field" />
+          <input type="password" {...register("password")} className="field" placeholder="Enter password" />
           {errors.password && <p className="mt-2 text-xs text-rose-600">{errors.password.message}</p>}
         </div>
       </div>
 
-      {errors.root && <p className="mt-4 text-sm text-rose-600">{errors.root.message}</p>}
+      {errors.root && (
+        <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {errors.root.message}
+        </div>
+      )}
 
       <button type="submit" className="btn-primary mt-6 w-full" disabled={isSubmitting}>
         {isSubmitting ? "Signing in..." : "Login"}
       </button>
 
-      <div className="mt-4 flex items-center justify-between text-sm">
+      <div className="mt-5 flex items-center justify-between gap-4 text-sm">
         <Link href="/forgot-password" className="text-slate-500 hover:text-blue-600">
           Forgot password?
         </Link>
@@ -79,8 +86,12 @@ export function LoginForm({ resetSuccess = false }: { resetSuccess?: boolean }) 
         </Link>
       </div>
 
-      <div className="mt-6 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-        Demo login: <span className="font-semibold">owner@garagepro.app</span> / <span className="font-semibold">password123</span>
+      <div className="mt-6 rounded-3xl border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Quick Access</p>
+        <p className="mt-2">
+          Demo login: <span className="font-semibold text-slate-900">owner@garagepro.app</span> /{" "}
+          <span className="font-semibold text-slate-900">password123</span>
+        </p>
       </div>
     </form>
   );
